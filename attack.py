@@ -14,6 +14,7 @@ api_hash = os.getenv("API_HASH")
 client = TelegramClient("anon", api_id, api_hash)
 
 target = None
+channel_name = None
 admins = [
     6121153070, # miqqil
     7393231125, # notrevr
@@ -30,7 +31,7 @@ async def link_to_objects(message_link):
     expression = r"((https://)?)t\.me/(?P<username>\w+)/(?P<number>\d+)/?"
     try:
         m = re.match(expression, message_link)
-        channel = await client.get_input_entity(m.group("username"))
+        channel = await client.get_entity(m.group("username"))
         message = await client.get_messages(channel, ids=int(m.group("number")))
         return channel, message
     except AttributeError:
@@ -40,10 +41,7 @@ async def link_to_objects(message_link):
 
 async def award_points(user_id):
     key = f"points.{user_id}"
-    if await redis.get(key) is None:
-        await redis.set(key, 1)
-    else:
-        await redis.incr(key)
+    await redis.hincrby(key, channel_name, 1)
 
 async def message_handler(event):
     if event.reply_to_msg_id == target:
@@ -64,17 +62,18 @@ async def delete_message_tracker():
         raise Exception("нет атак")
 
 async def start_attack(event, target_link):
-    global target
+    global target, channel_name
     channel, message = await link_to_objects(target_link)
     battalion_members = await client.get_participants(2992401166)
     result = await client(GetDiscussionMessageRequest(channel, message.id))
     target = result.messages[0].id
+    channel_name = channel.username
     await create_message_tracker(battalion_members, channel)
     await event.reply("✓ комментарии отслеживаются")
 
 async def end_attack(event):
-    global target
-    target = None
+    global target, channel_name
+    target = channel_name = None
     await delete_message_tracker()
     await event.reply("✓ отслеживание завершено")
 
@@ -83,11 +82,15 @@ async def get_stats(event, username):
         user = await client.get_entity(username)
     except ValueError:
         raise Exception("пользователь не найден")
-    points = await redis.get(f"points.{user.id}")
-    if points is None:
-        await event.reply("боец не примал участие в атаках")
+    stats = await redis.hgetall(f"points.{user.id}")
+    if stats:
+        await event.reply(
+            "статистика:\n" + "\n".join([
+                f"{key} - {value}" for key, value in stats.items()
+            ])
+        )
     else:
-        await event.reply(f"сообщений: {points}")
+        await event.reply("боец не примал участие в атаках")
         
 @client.on(events.NewMessage(pattern=r"\!атака", chats=[3320766140, 3320766140]))
 async def command_handler(event):
