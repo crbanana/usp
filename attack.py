@@ -14,7 +14,7 @@ api_id = os.getenv("API_ID")
 api_hash = os.getenv("API_HASH")
 client = TelegramClient("anon", api_id, api_hash)
 
-target = None
+targets = None
 channel_name = None
 admins = [
     6121153070, # miqqil
@@ -45,10 +45,10 @@ async def award_points(user_id):
     await redis.hincrby(key, channel_name, 1)
 
 async def message_handler(event):
-    if event.reply_to_msg_id == target:
+    if event.reply_to_msg_id in targets:
         await award_points(event.sender_id)
 
-async def create_message_tracker(battalion_members, channel):
+async def create_message_tracker(battalion_members):
     active_attacks = client.list_event_handlers()[1:]
     if active_attacks:
         raise Exception("уже есть активная атака")
@@ -70,21 +70,24 @@ async def join_to_discussion(channel):
     except errors.ChannelsTooMuchError, errors.UserAlreadyParticipantError:
         raise Exception("не получилось присоединится к комментариям")
 
+async def set_targets(channel, id_in_channel):
+    global targets, channel_name
+    channel_name = channel.username
+    result = await client(GetDiscussionMessageRequest(channel, id_in_channel))
+    targets = [m.id for m in result.messages]
+
 async def start_attack(event, target_link):
-    global target, channel_name
     channel, message = await link_to_objects(target_link)
     battalion_members = await client.get_participants(2992401166)
-    result = await client(GetDiscussionMessageRequest(channel, message.id))
     await join_to_discussion(channel)
-    target = result.messages[0].id
-    channel_name = channel.username
-    await create_message_tracker(battalion_members, channel)
+    await set_targets(channel, message.id)
+    await create_message_tracker(battalion_members)
     await event.reply("✓ комментарии отслеживаются")
 
 async def end_attack(event):
-    global target, channel_name
+    global targets, channel_name
     await delete_message_tracker()
-    target = channel_name = None
+    targets = channel_name = None
     await event.reply("✓ отслеживание завершено")
 
 async def get_stats(event, username):
@@ -102,7 +105,7 @@ async def get_stats(event, username):
     else:
         await event.reply("боец не примал участие в атаках")
         
-@client.on(events.NewMessage(pattern=r"\!атака", chats=[3320766140, 2992401166]))
+@client.on(events.NewMessage(pattern=r"\!атака", chats=[3320766140, 2992401166, 6632468692]))
 async def command_handler(event):
     args = event.raw_text.split()
     try:
