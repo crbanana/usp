@@ -1,6 +1,7 @@
 # Приложение для защиты комментариев
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, errors
 from telethon.tl.functions.messages import GetDiscussionMessageRequest
+from telethon.tl.functions.channels import GetFullChannelRequest, JoinChannelRequest
 from upstash_redis.asyncio import Redis
 import re
 import os
@@ -61,11 +62,20 @@ async def delete_message_tracker():
     if removed_count == 0:
         raise Exception("нет атак")
 
+async def join_to_discussion(channel):
+    full_channel = await client(GetFullChannelRequest(channel))
+    discussion_chat = await client.get_entity(full_channel.full_chat.linked_chat_id)
+    try:
+        await client(JoinChannelRequest(discussion_chat))
+    except errors.ChannelsTooMuchError, errors.UserAlreadyParticipantError:
+        raise Exception("не получилось присоединится к комментариям")
+
 async def start_attack(event, target_link):
     global target, channel_name
     channel, message = await link_to_objects(target_link)
     battalion_members = await client.get_participants(2992401166)
     result = await client(GetDiscussionMessageRequest(channel, message.id))
+    await join_to_discussion(channel)
     target = result.messages[0].id
     channel_name = channel.username
     await create_message_tracker(battalion_members, channel)
