@@ -73,8 +73,8 @@ async def start_attack(event, target_link):
 
 async def end_attack(event):
     global target, channel_name
-    target = channel_name = None
     await delete_message_tracker()
+    target = channel_name = None
     await event.reply("✓ отслеживание завершено")
 
 async def get_stats(event, username):
@@ -92,7 +92,7 @@ async def get_stats(event, username):
     else:
         await event.reply("боец не примал участие в атаках")
         
-@client.on(events.NewMessage(pattern=r"\!атака", chats=[3320766140, 3320766140]))
+@client.on(events.NewMessage(pattern=r"\!атака", chats=[3320766140, 2992401166]))
 async def command_handler(event):
     args = event.raw_text.split()
     try:
